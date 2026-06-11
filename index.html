@@ -1,0 +1,406 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>TomatoScan — Deteksi Penyakit Daun Tomat</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link href="https://fonts.googleapis.com/css2?family=Syne:wght@600;700;800&family=Inter:wght@400;500;600&display=swap" rel="stylesheet" />
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --red:    #dc2626;
+    --orange: #f97316;
+    --yellow: #facc15;
+    --green:  #22c55e;
+    --amber:  #f59e0b;
+    --bg:     #fafaf9;
+    --surface:#ffffff;
+    --border: #e5e7eb;
+    --text:   #111827;
+    --muted:  #6b7280;
+    --light:  #f3f4f6;
+    --radius: 16px;
+  }
+
+  body { font-family: 'Inter', sans-serif; background: var(--bg); color: var(--text); min-height: 100vh; }
+
+  /* Layout */
+  .layout { display: flex; min-height: 100vh; }
+
+  /* Sidebar */
+  .sidebar {
+    width: 220px; flex-shrink: 0;
+    background: var(--surface); border-right: 1px solid var(--border);
+    padding: 2rem 1.25rem; display: flex; flex-direction: column; gap: 1.25rem;
+    position: sticky; top: 0; height: 100vh; overflow-y: auto;
+  }
+  .sidebar-logo {
+    font-family: 'Syne', sans-serif; font-size: 1.3rem; font-weight: 800;
+    background: linear-gradient(135deg, var(--red), var(--orange), var(--yellow));
+    -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text;
+  }
+  .sidebar-divider { border: none; border-top: 1px solid var(--border); }
+  .sidebar-meta { font-size: 0.78rem; color: var(--muted); line-height: 1.9; }
+  .sidebar-meta b { color: var(--text); }
+  .sidebar-footer { margin-top: auto; font-size: 0.72rem; color: #9ca3af; }
+
+  .nav-btn {
+    display: block; width: 100%; text-align: left;
+    padding: 0.55rem 0.85rem; border-radius: 10px; border: none;
+    background: transparent; font-family: 'Inter', sans-serif;
+    font-size: 0.9rem; font-weight: 500; cursor: pointer; color: var(--muted);
+    transition: background 0.15s, color 0.15s;
+  }
+  .nav-btn.active, .nav-btn:hover { background: #fef2f2; color: var(--red); }
+
+  .api-badge {
+    display: inline-block; font-size: 0.72rem; font-weight: 600;
+    padding: 0.18rem 0.55rem; border-radius: 999px;
+  }
+  .api-badge.ok  { background: #dcfce7; color: #166534; }
+  .api-badge.err { background: #fee2e2; color: #991b1b; }
+  .api-badge.loading { background: #fef9c3; color: #854d0e; }
+
+  /* Main */
+  .main { flex: 1; padding: 2.5rem 2rem; max-width: 1000px; }
+
+  .hero-title {
+    font-family: 'Syne', sans-serif; font-size: 2.6rem; font-weight: 800;
+    background: linear-gradient(135deg, var(--red) 0%, var(--orange) 55%, var(--yellow) 100%);
+    -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text;
+    line-height: 1.1; margin-bottom: 0.35rem;
+  }
+  .hero-sub { font-size: 0.95rem; color: var(--muted); margin-bottom: 2rem; }
+
+  .cols { display: grid; grid-template-columns: 1fr 1.3fr; gap: 2rem; }
+  @media (max-width: 700px) { .cols { grid-template-columns: 1fr; } .sidebar { display: none; } }
+
+  .section-title {
+    font-family: 'Syne', sans-serif; font-size: 1rem; font-weight: 700;
+    color: var(--text); margin-bottom: 0.6rem;
+  }
+
+  /* Drop zone */
+  #drop-zone {
+    border: 2px dashed var(--border); border-radius: var(--radius);
+    padding: 2.5rem 1.5rem; text-align: center; cursor: pointer;
+    transition: border-color 0.2s, background 0.2s; background: var(--surface); position: relative;
+  }
+  #drop-zone.drag-over { border-color: var(--orange); background: #fff7ed; }
+  #drop-zone input[type=file] { position: absolute; inset: 0; opacity: 0; cursor: pointer; width: 100%; height: 100%; }
+  .drop-text { font-size: 0.88rem; color: var(--muted); }
+  .drop-hint { font-size: 0.78rem; color: #9ca3af; margin-top: 0.25rem; }
+
+  #preview-wrap { margin-top: 1rem; display: none; }
+  #preview-wrap img { width: 100%; border-radius: 12px; object-fit: cover; max-height: 220px; }
+
+  /* Result */
+  #result-placeholder {
+    height: 300px; display: flex; flex-direction: column; align-items: center;
+    justify-content: center; background: #fafafa; border: 2px dashed var(--border);
+    border-radius: var(--radius); color: #9ca3af; font-size: 0.9rem; text-align: center;
+  }
+
+  .result-card {
+    background: linear-gradient(135deg, #fff7ed, #fef2f2);
+    border: 2px solid #fed7aa; border-radius: var(--radius); padding: 1.25rem; display: none;
+  }
+  .result-label {
+    font-family: 'Syne', sans-serif; font-size: 1.5rem; font-weight: 700;
+    color: #991b1b; margin-bottom: 0.25rem;
+  }
+  .conf-pill {
+    display: inline-block; background: var(--red); color: white; font-weight: 600;
+    font-size: 0.82rem; padding: 0.15rem 0.65rem; border-radius: 999px; margin-left: 0.5rem; vertical-align: middle;
+  }
+  .severity-badge {
+    display: inline-block; color: white; font-weight: 600; font-size: 0.72rem;
+    padding: 0.12rem 0.55rem; border-radius: 999px; margin-left: 0.35rem; vertical-align: middle;
+  }
+  .result-desc { font-size: 0.88rem; color: #374151; margin-top: 0.5rem; line-height: 1.55; }
+  .treatment-box {
+    background: #f0fdf4; border-left: 4px solid var(--green);
+    border-radius: 0 10px 10px 0; padding: 0.65rem 0.9rem;
+    margin-top: 0.75rem; font-size: 0.85rem; color: #166534;
+  }
+
+  /* Bars */
+  #bars-section { margin-top: 1.25rem; display: none; }
+  .bar-row { margin-bottom: 7px; }
+  .bar-label-row { display: flex; justify-content: space-between; font-size: 0.78rem; margin-bottom: 3px; }
+  .bar-track { background: var(--light); border-radius: 999px; height: 9px; overflow: hidden; }
+  .bar-fill { height: 100%; border-radius: 999px; transition: width 0.5s ease; }
+
+  /* Spinner */
+  .spinner-wrap { display: none; align-items: center; justify-content: center; height: 300px; }
+  .spinner {
+    width: 36px; height: 36px; border: 4px solid #fed7aa;
+    border-top-color: var(--red); border-radius: 50%;
+    animation: spin 0.7s linear infinite;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  /* Error box */
+  .error-box {
+    background: #fef2f2; border: 1px solid #fecaca; border-radius: 10px;
+    padding: 0.75rem 1rem; font-size: 0.85rem; color: #991b1b; margin-top: 0.75rem; display: none;
+  }
+
+  /* Info page */
+  #page-info { display: none; }
+  .filter-row { display: flex; gap: 0.5rem; flex-wrap: wrap; margin-bottom: 1.5rem; }
+  .filter-chip {
+    padding: 0.3rem 0.75rem; border-radius: 999px; border: 1.5px solid var(--border);
+    font-size: 0.78rem; font-weight: 600; cursor: pointer;
+    background: var(--surface); color: var(--muted); transition: all 0.15s; font-family: 'Inter', sans-serif;
+  }
+  .filter-chip.active { border-color: var(--red); color: var(--red); background: #fef2f2; }
+
+  details { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; margin-bottom: 0.65rem; overflow: hidden; }
+  summary {
+    padding: 0.9rem 1rem; cursor: pointer; font-weight: 600; font-size: 0.9rem;
+    display: flex; align-items: center; gap: 0.5rem; list-style: none; user-select: none;
+  }
+  summary::-webkit-details-marker { display: none; }
+  summary::after { content: '▾'; margin-left: auto; color: var(--muted); font-size: 0.75rem; transition: transform 0.2s; }
+  details[open] summary::after { transform: rotate(-180deg); }
+  .details-body { padding: 0.85rem 1rem 1rem; font-size: 0.85rem; color: #374151; line-height: 1.6; border-top: 1px solid var(--border); }
+</style>
+</head>
+<body>
+<div class="layout">
+
+  <!-- Sidebar -->
+  <aside class="sidebar">
+    <div class="sidebar-logo">TomatoScan</div>
+    <hr class="sidebar-divider" />
+    <div>
+      <span class="api-badge loading" id="api-badge">Mengecek API...</span>
+    </div>
+    <hr class="sidebar-divider" />
+    <div class="sidebar-meta">
+      <b>Model:</b> MobileNetV2<br>
+      <b>Classes:</b> 11 kondisi<br>
+      <b>Accuracy:</b> >= 96%<br>
+      <b>Input:</b> 224 x 224
+    </div>
+    <hr class="sidebar-divider" />
+    <nav style="display:flex;flex-direction:column;gap:0.3rem">
+      <button class="nav-btn active" onclick="switchPage('diagnosa', this)">Diagnosa</button>
+      <button class="nav-btn" onclick="switchPage('info', this)">Info Penyakit</button>
+    </nav>
+    <div class="sidebar-footer">Made by Fircan Ferdinand</div>
+  </aside>
+
+  <!-- Main -->
+  <main class="main">
+
+    <!-- PAGE: DIAGNOSA -->
+    <div id="page-diagnosa">
+      <div class="hero-title">TomatoScan</div>
+      <div class="hero-sub">Deteksi penyakit daun tomat secara instan dengan deep learning</div>
+
+      <div class="cols">
+        <!-- Left -->
+        <div>
+          <div class="section-title">Upload Gambar Daun</div>
+          <div id="drop-zone">
+            <input type="file" accept="image/png,image/jpeg" onchange="handleFile(this.files[0])" />
+            <div class="drop-text">Klik atau drag gambar ke sini</div>
+            <div class="drop-hint">Format: JPG / PNG</div>
+          </div>
+          <div id="preview-wrap"><img id="preview-img" src="" alt="preview" /></div>
+          <div class="error-box" id="error-box"></div>
+        </div>
+
+        <!-- Right -->
+        <div>
+          <div id="result-placeholder">Upload gambar daun tomat<br>untuk mulai diagnosa</div>
+          <div class="spinner-wrap" id="spinner-wrap"><div class="spinner"></div></div>
+          <div class="result-card" id="result-card">
+            <div style="font-size:0.78rem;color:#9ca3af;margin-bottom:0.2rem">DIAGNOSIS</div>
+            <div class="result-label" id="result-label"></div>
+            <div class="result-desc" id="result-desc"></div>
+            <div class="treatment-box" id="result-treatment"></div>
+          </div>
+          <div id="bars-section">
+            <div class="section-title" style="margin-top:1rem">Confidence per Kelas</div>
+            <div id="bars-container"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- PAGE: INFO -->
+    <div id="page-info">
+      <div class="hero-title">Info Penyakit</div>
+      <div class="hero-sub">Referensi 11 kondisi daun tomat yang dapat dideteksi model</div>
+      <div class="filter-row" id="filter-row"></div>
+      <div id="disease-list"></div>
+    </div>
+
+  </main>
+</div>
+
+<script>
+const API = "https://fkaslana-tomatoscan.hf.space";
+
+const SEV_COLOR = { None:"#22c55e", Low:"#f59e0b", Medium:"#f97316", High:"#ef4444", Unknown:"#6b7280" };
+
+const DISEASE_INFO = {
+  "Bacterial_spot":   { display:"Bacterial Spot",       severity:"Medium", desc:"Penyakit bakteri Xanthomonas yang menyebabkan bercak-bercak kecil berair pada daun.",                                       treatment:"Semprot fungisida berbasis tembaga. Hindari penyiraman dari atas. Rotasi tanaman setiap musim." },
+  "Early_blight":     { display:"Early Blight",         severity:"Medium", desc:"Infeksi jamur Alternaria solani — bercak konsentris coklat gelap pada daun tua.",                                           treatment:"Gunakan fungisida chlorothalonil atau mancozeb. Buang daun yang terinfeksi dan jaga sirkulasi udara." },
+  "Late_blight":      { display:"Late Blight",          severity:"High",   desc:"Phytophthora infestans — penyakit paling destruktif pada tomat, menyebar cepat di kondisi lembab.",                        treatment:"Segera semprot fungisida sistemik (metalaxyl). Isolasi tanaman yang terinfeksi. Hindari kelembaban berlebih." },
+  "Leaf_Mold":        { display:"Leaf Mold",            severity:"Medium", desc:"Jamur Cladosporium fulvum menyebabkan bercak kuning di permukaan atas dan spora coklat di bawah daun.",                    treatment:"Kurangi kelembaban greenhouse. Gunakan fungisida berbahan aktif thiram atau chlorothalonil." },
+  "Septoria_leaf_spot": { display:"Septoria Leaf Spot", severity:"Medium", desc:"Bercak kecil melingkar dengan pusat abu-abu dan tepi gelap akibat jamur Septoria lycopersici.",                            treatment:"Semprot fungisida berbasis tembaga. Buang daun bagian bawah yang terinfeksi lebih awal." },
+  "Spider_mites Two-spotted_spider_mite": { display:"Spider Mites", severity:"Medium", desc:"Tungau laba-laba menyebabkan stippling halus pada daun dan web tipis di bagian bawah daun.",                  treatment:"Semprot insektisida/mitisida berbahan aktif abamectin. Semprotkan air bertekanan untuk membersihkan tungau." },
+  "Target_Spot":      { display:"Target Spot",          severity:"Medium", desc:"Jamur Corynespora cassiicola membentuk pola cincin konsentris seperti sasaran tembak pada daun.",                          treatment:"Gunakan fungisida berbahan aktif azoxystrobin atau difenoconazole. Jaga sirkulasi udara." },
+  "Tomato_Yellow_Leaf_Curl_Virus": { display:"Yellow Leaf Curl Virus", severity:"High", desc:"Virus TYLCV ditularkan kutu kebul (Bemisia tabaci) — daun menggulung ke atas dan menguning.",               treatment:"Tidak ada obat langsung. Kendalikan populasi kutu kebul dengan insektisida sistemik. Gunakan varietas tahan." },
+  "Tomato_mosaic_virus": { display:"Mosaic Virus",      severity:"High",   desc:"Virus ToMV menyebabkan pola mosaik kuning-hijau pada daun dan menghambat pertumbuhan.",                                    treatment:"Tidak ada obat. Cabut dan musnahkan tanaman terinfeksi. Sterilisasi alat. Gunakan benih bersertifikat." },
+  "healthy":          { display:"Healthy",              severity:"None",   desc:"Daun tomat dalam kondisi sehat tanpa tanda-tanda infeksi penyakit.",                                                        treatment:"Lanjutkan perawatan rutin: pemupukan seimbang, penyiraman teratur, dan monitoring berkala." },
+  "powdery_mildew":   { display:"Powdery Mildew",       severity:"Low",    desc:"Lapisan putih tepung pada permukaan daun akibat jamur Leveillula taurica — berkembang di kondisi kering.",                 treatment:"Semprot larutan baking soda (1%) atau fungisida sulfur. Kurangi kepadatan tanaman." },
+};
+
+// ── API health check ──────────────────────────────────────────────────────────
+async function checkHealth() {
+  const badge = document.getElementById('api-badge');
+  try {
+    const res = await fetch(`${API}/health`, { signal: AbortSignal.timeout(10000) });
+    const data = await res.json();
+    badge.className = 'api-badge ok';
+    badge.textContent = `${data.num_classes} kelas`;
+  } catch {
+    badge.className = 'api-badge err';
+    badge.textContent = 'API Offline';
+  }
+}
+checkHealth();
+
+// ── Nav ───────────────────────────────────────────────────────────────────────
+function switchPage(page, btn) {
+  document.getElementById('page-diagnosa').style.display = page === 'diagnosa' ? '' : 'none';
+  document.getElementById('page-info').style.display     = page === 'info'      ? '' : 'none';
+  document.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  if (page === 'info') renderInfoPage();
+}
+
+// ── Drag & drop ───────────────────────────────────────────────────────────────
+const dz = document.getElementById('drop-zone');
+dz.addEventListener('dragover', e => { e.preventDefault(); dz.classList.add('drag-over'); });
+dz.addEventListener('dragleave', () => dz.classList.remove('drag-over'));
+dz.addEventListener('drop', e => {
+  e.preventDefault(); dz.classList.remove('drag-over');
+  const f = e.dataTransfer.files[0];
+  if (f && f.type.startsWith('image/')) handleFile(f);
+});
+
+// ── File handling + inference ─────────────────────────────────────────────────
+function handleFile(file) {
+  if (!file) return;
+
+  // Show preview
+  const reader = new FileReader();
+  reader.onload = e => {
+    document.getElementById('preview-img').src = e.target.result;
+    document.getElementById('preview-wrap').style.display = 'block';
+  };
+  reader.readAsDataURL(file);
+
+  // Run inference
+  runInference(file);
+}
+
+async function runInference(file) {
+  const placeholder = document.getElementById('result-placeholder');
+  const spinnerWrap = document.getElementById('spinner-wrap');
+  const card        = document.getElementById('result-card');
+  const barsSection = document.getElementById('bars-section');
+  const errorBox    = document.getElementById('error-box');
+
+  // Reset UI
+  placeholder.style.display = 'none';
+  card.style.display         = 'none';
+  barsSection.style.display  = 'none';
+  errorBox.style.display     = 'none';
+  spinnerWrap.style.display  = 'flex';
+
+  try {
+    const fd1 = new FormData(); fd1.append('file', file);
+    const fd2 = new FormData(); fd2.append('file', file);
+
+    const [res1, res2] = await Promise.all([
+      fetch(`${API}/predict`, { method: 'POST', body: fd1 }),
+      fetch(`${API}/predict/top-k?k=6`, { method: 'POST', body: fd2 }),
+    ]);
+
+    if (!res1.ok) throw new Error(`Predict error: ${res1.status}`);
+    if (!res2.ok) throw new Error(`Top-k error: ${res2.status}`);
+
+    const result = await res1.json();
+    const topk   = await res2.json();
+
+    spinnerWrap.style.display = 'none';
+
+    const sc = SEV_COLOR[result.severity] || '#6b7280';
+    document.getElementById('result-label').innerHTML =
+      `${result.display} <span class="conf-pill">${result.confidence}%</span>
+       <span class="severity-badge" style="background:${sc}">${result.severity}</span>`;
+    document.getElementById('result-desc').textContent   = result.desc;
+    document.getElementById('result-treatment').innerHTML = `<b>Penanganan:</b> ${result.treatment}`;
+    card.style.display = 'block';
+
+    // Bars
+    const barsEl = document.getElementById('bars-container');
+    barsEl.innerHTML = topk.predictions.map(p => {
+      const color = p.label === result.label ? '#dc2626' : '#fed7aa';
+      return `<div class="bar-row">
+        <div class="bar-label-row"><span>${p.display}</span><span style="font-weight:600">${p.confidence}%</span></div>
+        <div class="bar-track"><div class="bar-fill" style="width:${p.confidence}%;background:${color}"></div></div>
+      </div>`;
+    }).join('');
+    barsSection.style.display = 'block';
+
+  } catch (e) {
+    spinnerWrap.style.display = 'none';
+    placeholder.style.display = 'none';
+    errorBox.style.display    = 'block';
+    errorBox.textContent      = `Gagal: ${e.message}. Pastikan API sedang berjalan atau coba lagi.`;
+  }
+}
+
+// ── Info page ─────────────────────────────────────────────────────────────────
+let activeFilters = new Set(['None','Low','Medium','High']);
+
+function renderInfoPage() {
+  document.getElementById('filter-row').innerHTML = ['None','Low','Medium','High'].map(s =>
+    `<button class="filter-chip ${activeFilters.has(s)?'active':''}"
+      onclick="toggleFilter('${s}',this)">${s}</button>`
+  ).join('');
+
+  document.getElementById('disease-list').innerHTML = Object.entries(DISEASE_INFO)
+    .filter(([,i]) => activeFilters.has(i.severity))
+    .map(([label, i]) => `
+      <details>
+        <summary>${i.display}
+          <span class="severity-badge" style="background:${SEV_COLOR[i.severity]}">${i.severity}</span>
+        </summary>
+        <div class="details-body">
+          <p><b>Deskripsi:</b> ${i.desc}</p>
+          <div class="treatment-box" style="margin-top:0.65rem"><b>Penanganan:</b> ${i.treatment}</div>
+          <p style="margin-top:0.5rem;font-size:0.76rem;color:#9ca3af">Label: <code>${label}</code></p>
+        </div>
+      </details>`
+    ).join('');
+}
+
+function toggleFilter(sev) {
+  if (activeFilters.has(sev)) activeFilters.delete(sev);
+  else activeFilters.add(sev);
+  renderInfoPage();
+}
+</script>
+</body>
+</html>
