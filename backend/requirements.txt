@@ -1,0 +1,6 @@
+fastapi==0.111.0
+uvicorn==0.29.0
+ai-edge-litert==1.0.1
+Pillow==10.3.0
+numpy==1.26.4
+python-multipart==0.0.9
